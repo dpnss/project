@@ -1,1 +1,52 @@
+pipeline{
+agent {
+  label 'slave'
+}
 
+triggers {
+  pollSCM '* * * * *'
+}
+
+tools{
+maven 'maven3.9.4'
+}
+
+stages{
+stage('git'){
+steps{
+checkout scmGit(branches: [[name: '*/main']], extensions: [], userRemoteConfigs: [[url: 'https://github.com/awsdevopstraining/maven-project.git']])
+}
+}
+
+stage('build'){
+steps{
+sh 'mvn package'
+}
+}
+
+stage('SonarQubeReport'){
+steps{
+    withSonarQubeEnv('sonarqube') {
+ sh 'mvn sonar:sonar'
+}
+}
+}
+stage('UploadArtifact'){
+steps{
+nexusArtifactUploader artifacts: [[artifactId: 'maven-web-application', classifier: '', file: 'target/maven-web-application.war', type: 'war']], credentialsId: 'nexuscredentials', groupId: 'com.ak', nexusUrl: '18.61.32.239:8081', nexusVersion: 'nexus3', protocol: 'http', repository: 'maven2-snapshots', version: '0.0.1-SNAPSHOT'
+}
+}
+stage('DeployAppIntoTomcat'){
+steps{
+deploy adapters: [tomcat9(credentialsId: 'tomcatcredentials', path: '', url: 'http://18.61.28.177:8080')], contextPath: null, onFailure: false, war: '**/*.war'
+}
+}
+}
+
+post {
+always {
+emailext body: '$DEFAULT_CONTENT', subject: '$DEFAULT_SUBJECT', to: 'arjunprodev@gmail.com'
+}
+}
+
+}
